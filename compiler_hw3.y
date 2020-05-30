@@ -173,15 +173,42 @@ forexpr
     : ident assignVal ';' ident compare ';' cal
 ;
 
+elses
+    : ELSE IF expr '{' {
+        scope++;
+        fprintf(file, "ifeq label%d\n", label);
+        fprintf(file, "ldc 0\ngoto label%d\n", label+1);
+        fprintf(file, "label%d:\nldc 1\n", label);
+        } stmts '}' {
+            scope--;
+            fprintf(file, "goto endif%d\n", scope);
+        } elses {
+            fprintf(file, "goto endif%d\n", scope);
+            fprintf(file, "label%d:\n", label+1);
+            label = label + 2;
+            }
+    | ELSE '{' {
+        scope++;
+        } stmts '}'         {
+        scope--;
+        }
+    |
+;
+
 ifelse
     : IF expr '{' {
         scope++;
         fprintf(file, "ifeq label%d\n", label);
         fprintf(file, "ldc 0\ngoto label%d\n", label+1);
-        fprintf(file, "label%d:\nldc 1\nlabel%d:\n", label, label+1);
-        } stmts '}'      { scope--; }
-    | ELSE IF expr '{' {scope++;} stmts '}' {scope--;}
-    | ELSE '{' {scope++;} stmts '}'         {scope--;}
+        fprintf(file, "label%d:\nldc 1\n", label);
+        } stmts '}'      { 
+            scope--; 
+            fprintf(file, "goto endif%d\n", scope);
+            fprintf(file, "label%d:\n", label+1);
+            label = label + 2;
+        } elses {
+            fprintf(file, "endif%d:\n", scope);
+        }
     | IF ID {
         printf("IDENT (name=%s, address=%d)\n", $2, lookup_symbol($2, scope));
         printf("error:%d: non-bool (type %s) used as for condition\n", yylineno+1, "int32");
@@ -556,8 +583,11 @@ print
         }
     }
     | PRINT { printflag = 0; } '(' expr ')' {
-        if(printflag == 0)
+        if(printflag == 0) {
             printf("PRINT int32\n");
+            fprintf(file, "getstatic java/lang/System/out Ljava/io/PrintStream;\n");
+            fprintf(file, "swap\ninvokevirtual java/io/PrintStream/println(I)V\n");
+        }
         else if(printflag == 1) {
             printf("PRINT bool\n");
 
@@ -569,10 +599,16 @@ print
             fprintf(file, "swap\ninvokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
             label = label + 2;
         }
-        else if(printflag == 2) 
+        else if(printflag == 2)  {
             printf("PRINT float32\n");
-        else
+            fprintf(file, "getstatic java/lang/System/out Ljava/io/PrintStream;\n");
+            fprintf(file, "swap\ninvokevirtual java/io/PrintStream/print(F)V\n");
+        }
+        else {
             printf("PRINT string\n");
+            fprintf(file, "getstatic java/lang/System/out Ljava/io/PrintStream;\n");
+            fprintf(file, "swap\ninvokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
+        }
     }
 ;
 
@@ -686,7 +722,21 @@ compare
     }
     | '<' expr      { printf("LSS\n"); }
     | GEQ expr      { printf("GEQ\n"); }
-    | LEQ expr      { printf("LEQ\n"); }
+    | LEQ expr      {
+        printf("LEQ\n"); 
+        if(printflag == 0) {
+            fprintf(file, "isub\nifle label%d\nldc 0\n", label);
+            fprintf(file, "goto label%d\nlabel%d:\nldc 1\n", label+1, label);
+            fprintf(file, "label%d:\n", label+1);
+            label = label + 2;
+        }
+        else if(printflag == 2) {
+            fprintf(file, "fsub\nifle label%d\nldc 0\n", label);
+            fprintf(file, "goto label%d\nlabel%d:\nldc 1\n", label+1, label);
+            fprintf(file, "label%d:\n", label+1);
+            label = label + 2;
+        }
+    }
     | EQL expr      { 
         printf("EQL\n"); 
         if(printflag == 0) {
@@ -694,6 +744,9 @@ compare
         }
         else if(printflag == 2)
             fprintf(file, "fsub\n");
+        fprintf(file, "ifeq label%d\niconst_1\ngoto label%d\n", label, label+1);
+        fprintf(file, "label%d:\niconst_0\nlabel%d:\n", label, label+1);
+        label = label + 2;
     }
     | NEQ expr      { printf("NEQ\n"); }
 ;
