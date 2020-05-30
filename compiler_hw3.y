@@ -47,6 +47,7 @@
     int tmp_id = -1;
     int label = 0,forcount = 0;
     int infor = 0;
+    int error = 0;
 %}
 
 %error-verbose
@@ -199,7 +200,9 @@ error_assign
 
 assign
     : '=' expr           { printf("ASSIGN\n"); }
-    | ADD_ASSIGN expr    { printf("error:%d: cannot assign to int32\nADD_ASSIGN\n", yylineno); }
+    | ADD_ASSIGN expr    { printf("error:%d: cannot assign to int32\nADD_ASSIGN\n", yylineno); 
+        error = 1;
+    }
     | SUB_ASSIGN     { printf("SUB_ASSIGN\n"); }
     | MUL_ASSIGN     { printf("MUL_ASSIGN\n"); }
     | QUO_ASSIGN     { printf("QUO_ASSIGN\n"); }
@@ -821,6 +824,8 @@ int main(int argc, char *argv[])
     fclose(yyin);
     fprintf(file, "return\n.end method\n");
     fclose(file);
+    if(error == 1)
+        remove("hw3.j");
     return 0;
 }
 
