@@ -45,7 +45,8 @@
 
     FILE *file;
     int tmp_id = -1;
-    int label = 0;
+    int label = 0,forcount = 0;
+    int infor = 0;
 %}
 
 %error-verbose
@@ -108,7 +109,13 @@ stmt
     | setVal
     | error_assign
     | ifelse
-    | forloop
+    | FOR {
+        fprintf(file, "for%d:\n", forcount);
+        infor = 1;
+    } forloop {
+        fprintf(file, "goto for%d\nfor%d:\n", forcount, forcount+1);
+        forcount = forcount + 2;
+    }
     | const_add
 ;
 
@@ -151,14 +158,14 @@ const_add
 ;
 
 forloop
-    : FOR const '{' {
+    : const '{' {
         printf("error:%d: non-bool (type float32) used as for condition\n", yylineno+1);
     } {scope++;} stmts '}'    {scope--;}
-    | FOR const_add '{' {
+    | const_add '{' {
         printf("error:%d: non-bool (type int32) used as for condition\n", yylineno+1);
     } {scope++;} stmts '}'    {scope--;}
-    | FOR expr '{' {scope++;} stmts '}'     {scope--;}
-    | FOR forexpr '{' {scope++;} stmts '}'  {scope--;}
+    | forexpr '{' {scope++;} stmts '}'     {scope--;}
+    | expr '{' {scope++;} stmts '}'     {scope--;}
 ;
 
 forexpr
@@ -166,7 +173,12 @@ forexpr
 ;
 
 ifelse
-    : IF expr '{' {scope++;} stmts '}'      {scope--;}
+    : IF expr '{' {
+        scope++;
+        fprintf(file, "ifeq label%d\n", label);
+        fprintf(file, "ldc 0\ngoto label%d\n", label+1);
+        fprintf(file, "label%d:\nldc 1\nlabel%d:\n", label, label+1);
+        } stmts '}'      { scope--; }
     | ELSE IF expr '{' {scope++;} stmts '}' {scope--;}
     | ELSE '{' {scope++;} stmts '}'         {scope--;}
     | IF ID {
@@ -535,6 +547,7 @@ print
         }
         else {
             printf("PRINTLN string\n");
+
             fprintf(file, "getstatic java/lang/System/out Ljava/io/PrintStream;\n");
             fprintf(file, "swap\ninvokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
         }
@@ -597,6 +610,7 @@ expr
     | '"' STRING_LIT '"'    { 
         printf("STRING_LIT %s\n", $2); 
         printflag = 3; 
+        fprintf(file, "ldc \"%s\"\n", $2);
     }
     | 
 ;
@@ -657,6 +671,8 @@ compare
             fprintf(file, "isub\n");
             fprintf(file, "ifgt label%d\niconst_0\ngoto label%d\n", label, label+1);
             fprintf(file, "label%d:\niconst_1\nlabel%d:\n", label, label+1);
+            if(infor == 1)
+                fprintf(file, "ifeq for%d\n", forcount+1);
         }
         else if(printflag == 2) {
             fprintf(file, "fcmpl\n");
@@ -668,7 +684,14 @@ compare
     | '<' expr      { printf("LSS\n"); }
     | GEQ expr      { printf("GEQ\n"); }
     | LEQ expr      { printf("LEQ\n"); }
-    | EQL expr      { printf("EQL\n"); }
+    | EQL expr      { 
+        printf("EQL\n"); 
+        if(printflag == 0) {
+            fprintf(file, "isub\n");
+        }
+        else if(printflag == 2)
+            fprintf(file, "fsub\n");
+    }
     | NEQ expr      { printf("NEQ\n"); }
 ;
 

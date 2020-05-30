@@ -1,2 +1,6 @@
 *.log 
 mycompiler
+*.output
+*.c
+*.tab.h
+*.j
