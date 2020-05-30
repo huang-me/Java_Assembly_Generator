@@ -111,18 +111,22 @@ stmt
     | error_assign
     | ifelse
     | FOR {
-        fprintf(file, "for%d:\n", forcount);
         infor = 1;
+        fprintf(file, "for%d:\n", scope*2);
     } forloop {
-        fprintf(file, "goto for%d\nfor%d:\n", forcount, forcount+1);
-        forcount = forcount + 2;
+        fprintf(file, "goto for%d\nfor%d:\n", scope*2, scope*2+1);
     }
     | const_add
 ;
 
 const
-    : INT_LIT
-    | FLOAT_LIT     {printf("FLOAT_LIT %f\n", $1);}
+    : INT_LIT {
+        fprintf(file, "ldc %d\n", $1);
+    }
+    | FLOAT_LIT     {
+        printf("FLOAT_LIT %f\n", $1);
+        fprintf(file, "ldc %f\n", $1);
+        }
 ;
 
 const_add
@@ -162,15 +166,30 @@ forloop
     : const '{' {
         printf("error:%d: non-bool (type float32) used as for condition\n", yylineno+1);
     } {scope++;} stmts '}'    {scope--;}
+
     | const_add '{' {
         printf("error:%d: non-bool (type int32) used as for condition\n", yylineno+1);
     } {scope++;} stmts '}'    {scope--;}
-    | forexpr '{' {scope++;} stmts '}'     {scope--;}
-    | expr '{' {scope++;} stmts '}'     {scope--;}
-;
 
-forexpr
-    : ident assignVal ';' ident compare ';' cal
+    | ID '=' {
+        for(int i=0;i<=scope;i++) {
+            if(lookup_symbol($1, i) != -1) tmp_scope = lookup_symbol($1, i);
+        }
+        fprintf(file, "iload %d\n", tmp_scope);
+    } const {
+        fprintf(file, "istore %d\n", tmp_scope);
+        fprintf(file, "for%d:\n", scope*2);
+    } ';' ident compare ';' ID INC '{' {scope++;} stmts '}'     {
+        for(int i=0; i<=scope; i++) {
+            if(lookup_symbol($1, i) != -1)
+                tmp_scope = lookup_symbol($1, i);
+        }
+        fprintf(file, "iload %d\n", tmp_scope);
+        fprintf(file, "ldc 1\niadd\nistore %d\n", tmp_scope);
+        scope--;
+        }
+
+    | expr '{' {scope++;} stmts '}'     {scope--;}
 ;
 
 elses
@@ -586,7 +605,7 @@ print
         if(printflag == 0) {
             printf("PRINT int32\n");
             fprintf(file, "getstatic java/lang/System/out Ljava/io/PrintStream;\n");
-            fprintf(file, "swap\ninvokevirtual java/io/PrintStream/println(I)V\n");
+            fprintf(file, "swap\ninvokevirtual java/io/PrintStream/print(I)V\n");
         }
         else if(printflag == 1) {
             printf("PRINT bool\n");
@@ -710,8 +729,9 @@ compare
             fprintf(file, "isub\n");
             fprintf(file, "ifgt label%d\niconst_0\ngoto label%d\n", label, label+1);
             fprintf(file, "label%d:\niconst_1\nlabel%d:\n", label, label+1);
-            if(infor == 1)
-                fprintf(file, "ifeq for%d\n", forcount+1);
+            if(infor == 1) {
+                fprintf(file, "ifeq for%d\n", scope*2+1);
+            }
         }
         else if(printflag == 2) {
             fprintf(file, "fcmpl\n");
@@ -735,6 +755,9 @@ compare
             fprintf(file, "goto label%d\nlabel%d:\nldc 1\n", label+1, label);
             fprintf(file, "label%d:\n", label+1);
             label = label + 2;
+        }
+        if(infor == 1) {
+            fprintf(file, "ifeq for%d\n", scope*2+1);
         }
     }
     | EQL expr      { 
