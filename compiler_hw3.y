@@ -369,6 +369,7 @@ Def
     }
     | VAR ID BOOL BOOL_initial      { 
         insert_symbol( scope, $2, "bool", yylineno, "-"); 
+        fprintf(file, "fstore %d\n", lookup_symbol($2, scope));
     }
     | VAR ID '[' INT_LIT { 
         printf("INT_LIT %d\n", $4);
@@ -738,6 +739,7 @@ term
                     }
                     else if( strcmp(typeArr[tmp_scope],"bool") == 0 ) {
                         printflag = 1;
+                        fprintf(file, "iload %d\n", tmp_scope);
                     }
                     else {
                         fprintf(file, "iload %d\n", tmp_scope);
