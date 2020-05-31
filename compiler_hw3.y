@@ -48,6 +48,7 @@
     int label = 0,forcount = 0;
     int infor = 0;
     int error = 0;
+    int lastScope = -1;
 %}
 
 %error-verbose
@@ -112,9 +113,15 @@ stmt
     | ifelse
     | FOR {
         infor = 1;
-        fprintf(file, "for%d:\n", scope*2);
+        if(lastScope == scope) {
+            forcount = forcount + 1;
+            if(forcount == 0) forcount++;
+        }
+        fprintf(file, "for%d%d:\n", scope*2, forcount);
     } forloop {
-        fprintf(file, "goto for%d\nfor%d:\n", scope*2, scope*2+1);
+        fprintf(file, "goto for%d%d\nfor%d%d:\n", scope*2, forcount, scope*2+1, forcount);
+        infor = 0;
+        lastScope = scope;
     }
     | const_add
 ;
@@ -178,7 +185,7 @@ forloop
         fprintf(file, "iload %d\n", tmp_scope);
     } const {
         fprintf(file, "istore %d\n", tmp_scope);
-        fprintf(file, "for%d:\n", scope*2);
+        fprintf(file, "for%d%d:\n", scope*2, forcount);
     } ';' ident compare ';' ID INC '{' {scope++;} stmts '}'     {
         for(int i=0; i<=scope; i++) {
             if(lookup_symbol($1, i) != -1)
@@ -730,7 +737,7 @@ compare
             fprintf(file, "ifgt label%d\niconst_0\ngoto label%d\n", label, label+1);
             fprintf(file, "label%d:\niconst_1\nlabel%d:\n", label, label+1);
             if(infor == 1) {
-                fprintf(file, "ifeq for%d\n", scope*2+1);
+                fprintf(file, "ifeq for%d%d\n", scope*2+1, forcount);
             }
         }
         else if(printflag == 2) {
@@ -740,7 +747,20 @@ compare
         }
         label = label + 2;
     }
-    | '<' expr      { printf("LSS\n"); }
+    | '<' expr      { 
+        printf("LSS\n"); 
+        fprintf(file, "isub\n");
+        fprintf(file, "iflt label%d\n", label);
+        if(infor == 1)
+            fprintf(file, "goto for%d%d\n", scope*2+1, forcount);
+        else 
+            fprintf(file, "ldc 0\n");
+        fprintf(file, "goto label%d\nlabel%d:\n", label+1, label);
+        if(infor == 0)
+            fprintf(file, "ldc 1\n");
+        fprintf(file, "label%d:\n", label+1);
+        label = label + 2;
+        }
     | GEQ expr      { printf("GEQ\n"); }
     | LEQ expr      {
         printf("LEQ\n"); 
@@ -757,7 +777,7 @@ compare
             label = label + 2;
         }
         if(infor == 1) {
-            fprintf(file, "ifeq for%d\n", scope*2+1);
+            fprintf(file, "ifeq for%d%d\n", scope*2+1, forcount);
         }
     }
     | EQL expr      { 
@@ -771,7 +791,17 @@ compare
         fprintf(file, "label%d:\niconst_0\nlabel%d:\n", label, label+1);
         label = label + 2;
     }
-    | NEQ expr      { printf("NEQ\n"); }
+    | NEQ expr      { 
+        printf("NEQ\n"); 
+        if(printflag == 0) {
+            fprintf(file, "isub\n");
+        }
+        else if(printflag == 2)
+            fprintf(file, "fsub\n");
+        fprintf(file, "ifne label%d\niconst_1\ngoto label%d\n", label, label+1);
+        fprintf(file, "label%d:\niconst_0\nlabel%d:\n", label, label+1);
+        label = label + 2;
+        }
 ;
 
 term
@@ -871,6 +901,17 @@ term
         fprintf(file, "ldc %d\n", $3);
         fprintf(file, "i2f\n");
         printflag = 2;
+    }
+    | INT '(' ID '[' INT_LIT ']' ')' {
+        fprintf(file, "aload %d\n", lookup_symbol($3, scope));
+        fprintf(file, "ldc %d\n", $5);
+        fprintf(file, "faload\n");
+        fprintf(file, "f2i\n");
+        printflag = 0;
+    }
+    | INT '(' expr ')' {
+        fprintf(file, "f2i\n");
+        printflag = 0;
     }
 ;
 
